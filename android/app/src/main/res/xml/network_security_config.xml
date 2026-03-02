@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PTRZN-1515: Configuração de segurança de rede para forçar HTTPS
+    e permitir SSL Pinning.
+-->
+<network-security-config>
+    <!-- Configuração base: força HTTPS -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Confia em certificados do sistema -->
+            <certificates src="system" />
+            <!-- Confia em certificados de usuário (apenas para desenvolvimento) -->
+            <!-- Remover em produção -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Configuração para domínios específicos (se necessário) -->
+    <!-- Exemplo para desenvolvimento local -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- Em produção, adicionar domain-config com pin-set para SSL Pinning -->
+    <!--
+    <domain-config>
+        <domain includeSubdomains="true">seu-dominio.com</domain>
+        <pin-set expiration="2025-12-31">
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+        </pin-set>
+    </domain-config>
+    -->
+</network-security-config>
