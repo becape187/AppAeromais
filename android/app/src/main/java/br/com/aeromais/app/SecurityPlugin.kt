@@ -324,7 +324,8 @@ class SecurityPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             
             // Obtém caminho do APK
-            val apkPath = packageInfo.applicationInfo.sourceDir
+            val applicationInfo = packageInfo.applicationInfo ?: return true
+            val apkPath = applicationInfo.sourceDir
             val apkFile = File(apkPath)
             
             if (!apkFile.exists()) {

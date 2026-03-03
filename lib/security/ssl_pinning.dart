@@ -2,20 +2,33 @@
 /// 
 /// PTRZN-1515: Implementa SSL Pinning para prevenir ataques Man-in-the-Middle
 /// e garantir que o app só se conecte ao servidor legítimo.
+/// 
+/// O certificado está embarcado em assets/certs/server.crt
+/// O hash SHA-256 será validado no WebView via NavigationDelegate
 
 import 'package:http/http.dart' as http;
-import 'dart:io';
-// PTRZN-1515: SSL Pinning será implementado via network_security_config.xml
-// import 'package:certificate_pinning/certificate_pinning.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 /// Configuração de SSL Pinning
 class SSLPinningConfig {
-  /// Lista de hashes SHA-256 dos certificados permitidos
+  /// Hash SHA-256 do certificado embarcado (assets/certs/server.crt)
   /// 
-  /// IMPORTANTE: Em produção, substituir pelos hashes reais do certificado do servidor.
-  /// Para obter o hash: openssl x509 -in certificate.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+  /// IMPORTANTE: Este hash será preenchido automaticamente após gerar o certificado.
+  /// O script generate_certificate.py exibe o hash que deve ser copiado aqui.
+  /// 
+  /// Para obter manualmente: 
+  /// openssl x509 -in server.crt -fingerprint -sha256 -noout | cut -d'=' -f2 | tr -d ':'
+  /// Depois converter para base64
+  static const String? certificateHash = null; // Será preenchido após gerar certificado
+  
+  /// Caminho do certificado embarcado no app
+  static const String certificatePath = 'assets/certs/aeromaisserver.crt';
+  
+  /// Lista de hashes SHA-256 dos certificados permitidos (fallback)
   static const List<String> allowedFingerprints = [
-    // TODO: Adicionar hashes SHA-256 dos certificados do servidor em produção
+    // Será preenchido após gerar certificado
     // Exemplo: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   ];
 
@@ -26,7 +39,48 @@ class SSLPinningConfig {
   ];
 
   /// Verifica se SSL Pinning está habilitado
-  static bool get isEnabled => allowedFingerprints.isNotEmpty;
+  static bool get isEnabled => certificateHash != null || allowedFingerprints.isNotEmpty;
+  
+  /// Carrega o certificado embarcado e retorna seu hash SHA-256
+  static Future<String?> loadCertificateHash() async {
+    try {
+      final certData = await rootBundle.load(certificatePath);
+      final certBytes = certData.buffer.asUint8List();
+      final certString = utf8.decode(certBytes);
+      
+      // Extrair certificado PEM (remover headers/footers se necessário)
+      final certLines = certString.split('\n');
+      final certContent = certLines
+          .where((line) => !line.startsWith('-----'))
+          .join('');
+      
+      // Decodificar base64 e calcular hash SHA-256
+      final certDer = base64Decode(certContent);
+      final hash = sha256.convert(certDer);
+      return base64Encode(hash.bytes);
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  /// Valida se um hash de certificado é permitido
+  static Future<bool> validateCertificateHash(String receivedHash) async {
+    // Se há hash configurado estaticamente, usar ele
+    if (certificateHash != null) {
+      return receivedHash.toLowerCase() == certificateHash!.toLowerCase();
+    }
+    
+    // Senão, carregar do certificado embarcado
+    final expectedHash = await loadCertificateHash();
+    if (expectedHash != null) {
+      return receivedHash.toLowerCase() == expectedHash.toLowerCase();
+    }
+    
+    // Fallback para lista de fingerprints
+    return allowedFingerprints.any(
+      (fp) => receivedHash.toLowerCase() == fp.toLowerCase()
+    );
+  }
 }
 
 /// Cliente HTTP seguro com SSL Pinning

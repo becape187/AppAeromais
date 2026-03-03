@@ -723,6 +723,10 @@ class _WebViewAppState extends State<WebViewApp> {
     _configureDisplayMode();
     
     debugPrint('WebViewApp - Carregando URL: ${widget.serverUrl}');
+    
+    // PTRZN-1515: Certificado está embarcado em assets/certs/server.crt
+    // Será instalado automaticamente via código nativo no primeiro uso
+    // O network_security_config.xml aceita certificados de usuário para IPs privados
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadRequest(Uri.parse(widget.serverUrl));

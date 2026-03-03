@@ -37,7 +37,8 @@ dependencies:
   network_info_plus: ^6.1.4
   shared_preferences: ^2.5.3
   connectivity_plus: ^6.0.5
-  # PTRZN-1515: SSL Pinning implementado via network_security_config.xml (nativo Android)
+  crypto: ^3.0.3
+  # PTRZN-1515: SSL Pinning implementado via código Flutter com certificado embarcado
 
 
   # The following adds the Cupertino Icons font to your application.

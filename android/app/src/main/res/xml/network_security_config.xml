@@ -7,34 +7,34 @@
     <!-- Configuração base: força HTTPS -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
-            <!-- Confia em certificados do sistema -->
+            <!-- Confia apenas em certificados do sistema -->
+            <!-- Certificado embarcado será validado via código -->
             <certificates src="system" />
-            <!-- Confia em certificados de usuário (apenas para desenvolvimento) -->
-            <!-- Remover em produção -->
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
     
-    <!-- Configuração para domínios específicos (se necessário) -->
-    <!-- Exemplo para desenvolvimento local -->
+    <!-- Configuração para IPs locais e privados -->
+    <!-- PTRZN-1515: Certificado único embarcado no app (assets/certs/server.crt) -->
+    <!-- O mesmo certificado é usado no servidor -->
+    <!-- Quando alterar certificado, alterar em ambos: servidor E app -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- IPs privados comuns -->
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">192.168.2.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <domain includeSubdomains="true">172.16.0.0</domain>
         <trust-anchors>
+            <!-- Confia apenas em certificados do sistema -->
+            <!-- Certificado embarcado será validado via plugin nativo -->
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </domain-config>
     
-    <!-- Em produção, adicionar domain-config com pin-set para SSL Pinning -->
-    <!--
-    <domain-config>
-        <domain includeSubdomains="true">seu-dominio.com</domain>
-        <pin-set expiration="2025-12-31">
-            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
-            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        </pin-set>
-    </domain-config>
-    -->
+    <!-- NOTA: Para certificados autoassinados em IPs locais, será necessário -->
+    <!-- plugin nativo que instala o certificado embarcado automaticamente -->
+    <!-- OU aceitar manualmente uma vez no dispositivo -->
 </network-security-config>

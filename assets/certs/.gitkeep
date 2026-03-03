@@ -1,0 +1,2 @@
+# Este diretório contém os certificados SSL para o app Android
+# O arquivo server.crt será adicionado aqui após gerar o certificado
