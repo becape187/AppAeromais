@@ -7,7 +7,6 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import com.berna.automais.aeromais.RouterMonitorPlugin
 import br.com.aeromais.app.SecurityPlugin
-
 class MainActivity: FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,5 +63,9 @@ class MainActivity: FlutterActivity() {
         flutterEngine.plugins.add(RouterMonitorPlugin())
         // PTRZN-1517, 1518, 1520: Registra plugin de segurança
         flutterEngine.plugins.add(SecurityPlugin())
+        // WireGuard VPN Service
+        flutterEngine.plugins.add(com.berna.automais.aeromais.WireGuardPlugin())
+        // SSL/HTTPS agora é tratado pelo Nginx com certificados Let's Encrypt válidos
+        // Não é mais necessário plugin para certificados autoassinados
     }
 }

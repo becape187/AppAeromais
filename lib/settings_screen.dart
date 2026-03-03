@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_settings.dart';
 import 'router_monitor.dart';
+import 'wireguard_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,8 +19,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _httpTimeout = 1000;
   bool _isLoading = true;
   bool _routerMonitoringEnabled = false;
+  bool _wireguardEnabled = false;
+  bool _wireguardConnected = false;
   List<String> _networkInterfaces = [];
   Timer? _interfaceUpdateTimer;
+  Timer? _wireguardStatusTimer;
 
   @override
   void initState() {
@@ -27,21 +31,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSettings();
     _loadNetworkInterfaces();
     _startInterfaceUpdateTimer();
+    _startWireGuardStatusTimer();
   }
 
   @override
   void dispose() {
     _interfaceUpdateTimer?.cancel();
+    _wireguardStatusTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
     final pingTimeout = await _appSettings.getPingTimeout();
     final httpTimeout = await _appSettings.getHttpTimeout();
+    final prefs = await SharedPreferences.getInstance();
+    final wireguardEnabled = prefs.getBool('wireguard_enabled') ?? false;
+    final wireguardConnected = await WireGuardService.checkConnectionStatus();
+    
     setState(() {
       _pingTimeout = pingTimeout.toDouble();
       _httpTimeout = httpTimeout.toDouble();
       _routerMonitoringEnabled = RouterMonitor.isMonitoring;
+      _wireguardEnabled = wireguardEnabled;
+      _wireguardConnected = wireguardConnected;
       _isLoading = false;
     });
   }
@@ -70,6 +82,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       await RouterMonitor.stopMonitoring();
     }
+  }
+
+  Future<void> _toggleWireGuard(bool enabled) async {
+    setState(() {
+      _wireguardEnabled = enabled;
+    });
+    
+    if (enabled) {
+      // Conectar ao WireGuard com configuração padrão para cpmais.local
+      // As chaves do cliente já estão configuradas no WireGuardService
+      final connected = await WireGuardService.startConnection(
+        server: 'cpmais.local',
+        port: 51820,
+        dns: '10.0.0.1',
+        allowedIPs: '10.0.0.0/24',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(connected 
+              ? 'WireGuard conectado ao cpmais.local' 
+              : 'Erro ao conectar ao WireGuard'),
+            backgroundColor: connected ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } else {
+      await WireGuardService.stopConnection();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('WireGuard desconectado'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+    
+    // Atualizar status
+    if (mounted) {
+      setState(() {
+        _wireguardConnected = enabled && WireGuardService.isConnected;
+      });
+    }
+  }
+
+  void _startWireGuardStatusTimer() {
+    _wireguardStatusTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (mounted) {
+        final connected = await WireGuardService.checkConnectionStatus();
+        setState(() {
+          _wireguardConnected = connected;
+        });
+      }
+    });
   }
 
   Future<void> _loadNetworkInterfaces() async {
@@ -140,6 +208,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 24),
                 
+                // Seção WireGuard VPN
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'WireGuard VPN',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Conexão automática com cpmais.local',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SwitchListTile(
+                          title: const Text('Conexão WireGuard Automática'),
+                          subtitle: Text(
+                            _wireguardConnected 
+                              ? 'Conectado ao cpmais.local' 
+                              : 'Desconectado',
+                            style: TextStyle(
+                              color: _wireguardConnected ? Colors.green : Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          value: _wireguardEnabled,
+                          onChanged: _toggleWireGuard,
+                          secondary: Icon(
+                            _wireguardConnected ? Icons.vpn_lock : Icons.vpn_lock_outlined,
+                            color: _wireguardConnected ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                        if (_wireguardEnabled)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Servidor: cpmais.local:51820',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                Text(
+                                  'DNS: 10.0.0.1',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                Text(
+                                  'Status: ${_wireguardConnected ? "Conectado" : "Reconectando..."}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: _wireguardConnected ? Colors.green : Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
                 // Seção Interfaces de Rede
                 Card(
                   child: Padding(
@@ -169,7 +307,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           )
                         else
                           ..._networkInterfaces.map((interface) {
-                            bool isWlan0 = interface.startsWith('wlan0');
                             bool isSwlan0 = interface.startsWith('swlan0');
                             bool isUp = interface.contains('UP');
                             
@@ -198,7 +335,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 24),
                 
-                // Seção Timeouts
+                // Seção URL do Servidor
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'URL do Servidor',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Configure a URL do servidor (ex: https://cpmais.aeromais.com.br)',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FutureBuilder<String?>(
+                          future: SharedPreferences.getInstance().then((prefs) => prefs.getString('server_url')),
+                          builder: (context, snapshot) {
+                            final TextEditingController controller = TextEditingController(
+                              text: snapshot.data ?? 'https://cpmais.aeromais.com.br'
+                            );
+                            return TextField(
+                              controller: controller,
+                              decoration: const InputDecoration(
+                                labelText: 'URL do Servidor',
+                                hintText: 'https://cpmais.aeromais.com.br',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.link),
+                              ),
+                              keyboardType: TextInputType.url,
+                              onSubmitted: (value) async {
+                                if (value.isNotEmpty) {
+                                  String url = value.trim();
+                                  
+                                  // Garantir que usa HTTPS
+                                  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                                    url = 'https://$url';
+                                  }
+                                  if (url.startsWith('http://')) {
+                                    url = url.replaceFirst('http://', 'https://');
+                                  }
+                                  
+                                  // Remover porta se especificada (Nginx usa 443 padrão)
+                                  final uri = Uri.parse(url);
+                                  if (uri.hasPort && uri.port != 443) {
+                                    url = 'https://${uri.host}${uri.path}';
+                                  }
+                                  
+                                  // Se for IP, sugerir migração para domínio
+                                  final isIP = RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(uri.host);
+                                  if (isIP) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('⚠️ Use o domínio cpmais.aeromais.com.br em vez de IP'),
+                                          backgroundColor: Colors.orange,
+                                          duration: Duration(seconds: 3),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                  
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setString('server_url', url);
+                                  
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('URL salva: $url'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Nota: O WebSocket será acessado via wss://[domínio]/ws automaticamente.',
+                          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Seção Timeouts (mantida para compatibilidade, mas não mais usado para busca)
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -209,6 +441,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'Configurações de Rede',
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Essas configurações não são mais usadas (busca automática removida)',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
                           ),
                         ),
                         const SizedBox(height: 16),
